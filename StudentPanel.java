@@ -37,7 +37,7 @@ public class StudentPanel extends JPanel {
     private void loadAvailableTeachers() {
         teacherComboBox.removeAllItems();
         try (Connection con = Database.getConnection();
-             PreparedStatement stmt = con.prepareStatement("SELECT id, name FROM teachers WHERE status = 'active'")) {
+             PreparedStatement stmt = con.prepareStatement("SELECT id, name FROM users WHERE status = 'active' and role = 'Teacher'")) {
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
                 int teacherId = rs.getInt("id");
