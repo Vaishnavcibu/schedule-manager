@@ -42,7 +42,7 @@ public class StudentPanel extends JPanel {
             while (rs.next()) {
                 int teacherId = rs.getInt("id");
                 String teacherName = rs.getString("name");
-                teacherComboBox.addItem(teacherName + " (ID: " + teacherId + ")");
+                teacherComboBox.addItem(teacherName);
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
