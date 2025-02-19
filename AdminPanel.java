@@ -3,7 +3,6 @@ import java.awt.event.*;
 import java.sql.*;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.text.*;
 
 public class AdminPanel extends JPanel {
     private CardLayout cardLayout;
@@ -55,14 +54,13 @@ public class AdminPanel extends JPanel {
         button.setBorderPainted(false);
         button.setOpaque(true);
         button.setFont(new Font("Arial", Font.BOLD, 14));
-        button.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        
+
         button.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
                 button.setBackground(Color.decode("#00B4D8"));
             }
-            
+
             @Override
             public void mouseExited(MouseEvent e) {
                 button.setBackground(Color.decode("#0077B6"));
@@ -82,101 +80,124 @@ public class AdminPanel extends JPanel {
     }
 }
 
-class AddUserPanel extends JPanel {
-    private JTextField txtId, txtName;
-    private JPasswordField txtPassword;
-    private JComboBox<String> comboRole;
-    private JButton btnRegister;
-    private JCheckBox showPassword;
-    private UserListPanel userListPanel;
+class UserListPanel extends JPanel {
+    private JTable table;
+    private DefaultTableModel model;
+    private JTextField txtName;
+    private JComboBox<String> cmbRole;
+    private JButton btnEdit, btnDelete, btnSave;
 
-    public AddUserPanel(UserListPanel userListPanel) {
-        this.userListPanel = userListPanel;
-        setLayout(new GridBagLayout());
-        setBackground(Color.decode("#90E0EF"));
-        
-        JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setBackground(Color.decode("#CAF0F8"));
-        formPanel.setOpaque(true);
-        formPanel.setPreferredSize(new Dimension(500, 400));
-        formPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        
+    public UserListPanel() {
+        setLayout(new BorderLayout());
+        model = new DefaultTableModel(new String[]{"ID", "Name", "Role", "Status"}, 0);
+        table = new JTable(model);
+        add(new JScrollPane(table), BorderLayout.CENTER);
+
+        JPanel editPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
         gbc.gridx = 0;
         gbc.gridy = 0;
-        gbc.anchor = GridBagConstraints.WEST;
+        editPanel.add(new JLabel("Edit User"), gbc);
 
-        Dimension fieldSize = new Dimension(300, 40);
-
-        formPanel.add(new JLabel("ID:"), gbc);
+        gbc.gridy = 1;
+        editPanel.add(new JLabel("Name:"), gbc);
+        txtName = new JTextField(15);
         gbc.gridx = 1;
-        txtId = new JTextField(30);
-        txtId.setPreferredSize(fieldSize);
-        formPanel.add(txtId, gbc);
+        editPanel.add(txtName, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy++;
-        formPanel.add(new JLabel("Name:"), gbc);
+        gbc.gridy = 2;
+        editPanel.add(new JLabel("Role:"), gbc);
+        cmbRole = new JComboBox<>(new String[]{"Student", "Teacher"});
         gbc.gridx = 1;
-        txtName = new JTextField(30);
-        txtName.setPreferredSize(fieldSize);
-        formPanel.add(txtName, gbc);
+        editPanel.add(cmbRole, gbc);
 
-        gbc.gridx = 0;
-        gbc.gridy++;
-        formPanel.add(new JLabel("Role:"), gbc);
-        gbc.gridx = 1;
-        comboRole = new JComboBox<>(new String[]{"Student", "Teacher"});
-        comboRole.setPreferredSize(fieldSize);
-        formPanel.add(comboRole, gbc);
+        add(editPanel, BorderLayout.SOUTH);
 
-        gbc.gridx = 0;
-        gbc.gridy++;
-        formPanel.add(new JLabel("Password:"), gbc);
-        gbc.gridx = 1;
-        txtPassword = new JPasswordField(30);
-        txtPassword.setPreferredSize(fieldSize);
-        formPanel.add(txtPassword, gbc);
+        JPanel btnPanel = new JPanel();
+        btnEdit = new JButton("Edit Selected");
+        btnSave = new JButton("Save Changes");
+        btnDelete = new JButton("Delete");
+        btnPanel.add(btnEdit);
+        btnPanel.add(btnSave);
+        btnPanel.add(btnDelete);
+        add(btnPanel, BorderLayout.NORTH);
 
-        showPassword = new JCheckBox("Show Password");
-        showPassword.addActionListener(e -> txtPassword.setEchoChar(showPassword.isSelected() ? (char) 0 : '*'));
-        gbc.gridy++;
-        formPanel.add(showPassword, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy++;
-        gbc.gridwidth = 2;
-        gbc.anchor = GridBagConstraints.CENTER;
-        btnRegister = new JButton("Register");
-        formPanel.add(btnRegister, gbc);
-        
-        add(formPanel);
-        btnRegister.addActionListener(e -> addUserToDatabase());
+        btnEdit.addActionListener(e -> editUser());
+        btnDelete.addActionListener(e -> deleteUser());
+        btnSave.addActionListener(e -> saveChanges());
     }
-    
-    private void addUserToDatabase() {
-        String id = txtId.getText().trim();
-        String name = txtName.getText().trim();
-        String role = comboRole.getSelectedItem().toString();
-        String password = new String(txtPassword.getPassword()).trim();
 
-        if (id.isEmpty() || name.isEmpty() || password.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "All fields must be filled.", "Validation Error", JOptionPane.ERROR_MESSAGE);
+    public void loadUsers() {
+        model.setRowCount(0);
+        try (Connection con = Database.getConnection();
+             Statement stmt = con.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT id, name, role, status FROM users")) {
+            while (rs.next()) {
+                model.addRow(new Object[]{rs.getString("id"), rs.getString("name"), rs.getString("role"), rs.getString("status")});
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    private void editUser() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Please select a user to edit.");
             return;
         }
+        txtName.setText((String) model.getValueAt(selectedRow, 1));
+        cmbRole.setSelectedItem(model.getValueAt(selectedRow, 2));
+    }
 
-        try (Connection con = Database.getConnection();
-             PreparedStatement stmt = con.prepareStatement("INSERT INTO users (id, name, role, password, status) VALUES (?, ?, ?, ?, 'Active')")) {
-            stmt.setString(1, id);
-            stmt.setString(2, name);
-            stmt.setString(3, role);
-            stmt.setString(4, password);
-            stmt.executeUpdate();
-            JOptionPane.showMessageDialog(this, "User registered successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error registering user.", "Database Error", JOptionPane.ERROR_MESSAGE);
-            ex.printStackTrace();
+    private void saveChanges() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Please select a user to save changes.");
+            return;
+        }
+        String id = (String) model.getValueAt(selectedRow, 0);
+        String newName = txtName.getText();
+        String newRole = (String) cmbRole.getSelectedItem();
+        if (!newName.trim().isEmpty()) {
+            try (Connection con = Database.getConnection();
+                 PreparedStatement stmt = con.prepareStatement("UPDATE users SET name=?, role=? WHERE id=?")) {
+                stmt.setString(1, newName);
+                stmt.setString(2, newRole);
+                stmt.setString(3, id);
+                stmt.executeUpdate();
+                loadUsers();
+                JOptionPane.showMessageDialog(this, "User updated successfully!");
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error updating user.");
+            }
+        }
+    }
+
+    private void deleteUser() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Please select a user to delete.");
+            return;
+        }
+        String id = (String) model.getValueAt(selectedRow, 0);
+        int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to delete this user?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            try (Connection con = Database.getConnection();
+                 PreparedStatement stmt = con.prepareStatement("DELETE FROM users WHERE id=?")) {
+                stmt.setString(1, id);
+                stmt.executeUpdate();
+                loadUsers();
+                JOptionPane.showMessageDialog(this, "User deleted successfully!");
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error deleting user.");
+            }
         }
     }
 }
