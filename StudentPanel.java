@@ -1,5 +1,4 @@
 import java.awt.*;
-import java.awt.event.*;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,70 +13,107 @@ public class StudentPanel extends JPanel {
     private JTextField txtTime;
     private JButton btnRequestAppointment;
     private Map<String, Integer> teacherMap;
+    private DefaultTableModel teacherStatusModel;
+    private JTable teacherStatusTable;
 
     public StudentPanel(int studentId) {
         this.studentId = studentId;
         this.teacherMap = new HashMap<>();
         setLayout(new BorderLayout());
 
-        // Sidebar
+        // Sidebar Navigation
         JPanel sidebar = new JPanel(new GridLayout(2, 1, 5, 5));
         sidebar.setBackground(Color.decode("#03045E"));
-        JButton btnRequestPanel = createStyledButton("Request Appointment");
+        
+        JButton btnRequestAppointmentPanel = createStyledButton("Request Appointment");
         JButton btnTeacherStatus = createStyledButton("Teacher Status");
-        sidebar.add(btnRequestPanel);
+        
+        sidebar.add(btnRequestAppointmentPanel);
         sidebar.add(btnTeacherStatus);
         add(sidebar, BorderLayout.WEST);
 
-        // Content Panel
+        // Main Content Area
         cardLayout = new CardLayout();
         contentPanel = new JPanel(cardLayout);
-        contentPanel.add(createRequestPanel(), "RequestPanel");
-        contentPanel.add(createStatusPanel(), "StatusPanel");
+        JPanel requestAppointmentPanel = createRequestAppointmentPanel();
+        JPanel teacherStatusPanel = createTeacherStatusPanel();
+        
+        contentPanel.add(requestAppointmentPanel, "RequestAppointment");
+        contentPanel.add(teacherStatusPanel, "TeacherStatus");
+        
         add(contentPanel, BorderLayout.CENTER);
 
-        btnRequestPanel.addActionListener(e -> cardLayout.show(contentPanel, "RequestPanel"));
+        // Button Listeners
+        btnRequestAppointmentPanel.addActionListener(e -> cardLayout.show(contentPanel, "RequestAppointment"));
         btnTeacherStatus.addActionListener(e -> {
             loadTeacherStatus();
-            cardLayout.show(contentPanel, "StatusPanel");
+            cardLayout.show(contentPanel, "TeacherStatus");
         });
+
+        // Load available teachers
+        loadAvailableTeachers();
     }
 
-    private JPanel createRequestPanel() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        panel.setBackground(Color.WHITE);
-
+    private JPanel createRequestAppointmentPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
         JPanel formPanel = new JPanel(new GridLayout(3, 2, 10, 10));
-        formPanel.setBorder(BorderFactory.createTitledBorder("Request Appointment"));
-
+        
         formPanel.add(new JLabel("Select Teacher:"));
         teacherComboBox = new JComboBox<>();
         formPanel.add(teacherComboBox);
-
+        
         formPanel.add(new JLabel("Time:"));
         txtTime = new JTextField();
         formPanel.add(txtTime);
-
-        formPanel.add(new JLabel());
+        
         btnRequestAppointment = new JButton("Request Appointment");
+        formPanel.add(new JLabel());
         formPanel.add(btnRequestAppointment);
-
-        panel.add(formPanel, BorderLayout.CENTER);
+        
         btnRequestAppointment.addActionListener(e -> requestAppointment());
-        loadAvailableTeachers();
+        panel.add(formPanel, BorderLayout.CENTER);
+        
         return panel;
     }
 
-    private JPanel createStatusPanel() {
+    private JPanel createTeacherStatusPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Teacher Status"));
-
-        String[] columnNames = {"Teacher Name", "Time Allotted", "Status"};
-        DefaultTableModel model = new DefaultTableModel(columnNames, 0);
-        JTable table = new JTable(model);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        teacherStatusModel = new DefaultTableModel(new String[]{"Teacher Name", "Time Allotted", "Status"}, 0);
+        teacherStatusTable = new JTable(teacherStatusModel);
+        panel.add(new JScrollPane(teacherStatusTable), BorderLayout.CENTER);
         return panel;
+    }
+
+    private void loadTeacherStatus() {
+        teacherStatusModel.setRowCount(0);
+        try (Connection con = Database.getConnection();
+             PreparedStatement stmt = con.prepareStatement(
+                 "SELECT t.name, a.time, a.status FROM appointments a " +
+                 "JOIN teachers t ON a.teacher_id = t.id WHERE a.student_id = ?")) {
+            stmt.setInt(1, studentId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                teacherStatusModel.addRow(new Object[]{
+                    rs.getString("name"),
+                    rs.getString("time"),
+                    rs.getString("status")
+                });
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error loading teacher status.");
+        }
+    }
+
+    private JButton createStyledButton(String text) {
+        JButton button = new JButton(text);
+        button.setBackground(Color.decode("#0077B6"));
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setOpaque(true);
+        button.setFont(new Font("Arial", Font.BOLD, 14));
+        return button;
     }
 
     private void loadAvailableTeachers() {
@@ -93,7 +129,8 @@ public class StudentPanel extends JPanel {
                 teacherMap.put(teacherName, teacherId);
             }
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error loading teachers.");
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error loading available teachers.");
         }
     }
 
@@ -111,42 +148,10 @@ public class StudentPanel extends JPanel {
             stmt.setInt(2, teacherId);
             stmt.setString(3, time);
             stmt.executeUpdate();
-            JOptionPane.showMessageDialog(this, "Appointment request sent!");
+            JOptionPane.showMessageDialog(this, "Appointment request sent successfully!");
         } catch (SQLException ex) {
+            ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Error sending appointment request.");
         }
-    }
-
-    private void loadTeacherStatus() {
-        DefaultTableModel model = new DefaultTableModel(new String[]{"Teacher Name", "Time Allotted", "Status"}, 0);
-        try (Connection con = Database.getConnection();
-             PreparedStatement stmt = con.prepareStatement("SELECT t.name, a.time, a.status FROM appointments a JOIN teachers t ON a.teacher_id = t.id WHERE a.student_id = ?")) {
-            stmt.setInt(1, studentId);
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                model.addRow(new Object[]{rs.getString("name"), rs.getString("time"), rs.getString("status")});
-            }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error loading teacher status.");
-        }
-    }
-
-    private JButton createStyledButton(String text) {
-        JButton button = new JButton(text);
-        button.setBackground(Color.decode("#0077B6"));
-        button.setForeground(Color.WHITE);
-        button.setFont(new Font("Arial", Font.BOLD, 14));
-        button.setFocusPainted(false);
-        button.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                button.setBackground(Color.decode("#00B4D8"));
-            }
-            @Override
-            public void mouseExited(MouseEvent e) {
-                button.setBackground(Color.decode("#0077B6"));
-            }
-        });
-        return button;
     }
 }
